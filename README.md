@@ -57,4 +57,4 @@ O **MercadoFicticio** é um protótipo de aplicação back‑end para demonstrar
 1. **Clone** o repositório  
    ```bash
    git clone https://github.com/Ian-Ribeiro/proj-pymongo.git
-   cd py-mongo
+   cd proj-pymongo
