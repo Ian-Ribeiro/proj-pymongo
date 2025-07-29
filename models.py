@@ -111,7 +111,7 @@ def group():
 
         print("\nTabelas disponíveis no cluster:")
         for i, name in enumerate(collection_names, 1):
-            print(f"{i}- {name}")
+            print(f"{i}- {name.capitalize()}")
 
         collection_choice = int(input("\nDigite o número da tabela que deseja consultar: "))
         if not (1 <= collection_choice <= len(collection_names)):
@@ -128,7 +128,7 @@ def group():
             return
 
         fields = [field for field in sample_document.keys() if field != '_id']
-        print(f"\nCampos disponíveis em '{selected_collection_name}':")
+        print(f"\nCampos disponíveis em '{selected_collection_name.capitalize()}':")
         for i, field in enumerate(fields, 1):
             print(f"{i}- {field}")
 
