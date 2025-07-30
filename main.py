@@ -1,5 +1,5 @@
 from bson import ObjectId
-from models import *
+from models import DataMecardo
 
 def main():
     pass
