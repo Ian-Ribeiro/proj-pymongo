@@ -6,10 +6,6 @@ from pprint import pprint
 
 db = get_database(db_name,client)
 
-# Criando o método de inserir.
-def inserir():
-    pass
-
 def find():
     try:
         # 1. Listar todas as coleções (tabelas) no banco de dados.
@@ -232,3 +228,143 @@ def consulta():
             print("Entrada inválida. Por favor, digite um número.")
         except Exception as e:
             print(f"Ocorreu um erro inesperado no menu de consulta: {e}")
+
+
+# Criando o método de inserir.
+def inserir():
+    try:
+        collection_names = db.list_collection_names()
+        if not collection_names:
+            print("Nenhuma tabela (coleção) encontrada no banco de dados.")
+            return
+
+        print("\nTabelas disponíveis no cluster:")
+        for i, name in enumerate(collection_names, 1):
+            print(f"{i}- {name.capitalize()}")
+
+        collection_choice = int(input("\nDigite o número da tabela onde deseja inserir: "))
+        if not (1 <= collection_choice <= len(collection_names)):
+            print("Seleção de tabela inválida.")
+            return
+        
+        selected_collection_name = collection_names[collection_choice - 1]
+        collection = db[selected_collection_name]
+
+        template_doc = collection.find_one()
+        
+        if not template_doc:
+            print("Coleção vazia. Não há modelo para seguir. Por favor, insira manualmente.")
+            # Você pode adicionar a lógica de inserção manual aqui se desejar
+            return
+
+        if '_id' in template_doc:
+            del template_doc['_id']
+            
+        print(f"\n--- Preenchendo um novo documento para '{selected_collection_name.capitalize()}' ---")
+        
+        # Função auxiliar recursiva para preencher dados aninhados
+        def preencher_campos(modelo, prefixo=""):
+            dados_inseridos = {}
+            for campo, valor_modelo in modelo.items():
+                # 1. Verifica se é uma lista de sub-documentos
+                if isinstance(valor_modelo, list) and valor_modelo and isinstance(valor_modelo[0], dict):
+                    print(f"\n{prefixo}O campo '{campo}' é uma LISTA de sub-documentos.")
+                    sub_template = valor_modelo[0] # Usa o primeiro item como modelo
+                    lista_criada = []
+                    for i in range(0,1):
+                        print(f"\n{prefixo}--- Preenchendo '{campo}' ---")
+                        # Chama a recursão para preencher cada item da lista
+                        item_preenchido = preencher_campos(sub_template, prefixo + "  ")
+                        lista_criada.append(item_preenchido)
+                    
+                    dados_inseridos[campo] = lista_criada
+
+                # 2. Verifica se é um único sub-documento (objeto aninhado)
+                elif isinstance(valor_modelo, dict):
+                    print(f"\n{prefixo}Preenchendo o sub-documento '{campo}':")
+                    # Chama a recursão para preencher o sub-documento
+                    dados_inseridos[campo] = preencher_campos(valor_modelo, prefixo + "  ")
+
+                # 3. Caso contrário, é um campo simples
+                else:
+                    valor_usuario = input(f"{prefixo}- Digite o valor para '{campo}': ")
+                    dados_inseridos[campo] = valor_usuario
+                    
+            return dados_inseridos
+
+        # Inicia o processo de preenchimento a partir do modelo principal
+        data = preencher_campos(template_doc)
+
+        if not data:
+            print("Nenhum dado inserido. Operação cancelada.")
+            return
+
+        result = collection.insert_one(data)
+        print("\nDocumento inserido com sucesso!")
+        print("--- Documento Inserido ---")
+        documento_inserido = collection.find_one({"_id": result.inserted_id})
+        pprint(documento_inserido)
+        print("--------------------------")
+
+    except ValueError:
+        print("Entrada inválida. Por favor, insira um número correspondente à opção.")
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado: {e}")
+
+
+# Criando a funcão de atualizar.
+def atualizar():
+    pass
+
+# Criando a função de deletar.
+def deletar():
+    try:
+        collection_names = db.list_collection_names()
+        if not collection_names:
+            print("Nenhuma tabela (coleção) encontrada no banco de dados.")
+            return
+
+        print("\nTabelas disponíveis no cluster:")
+        for i, name in enumerate(collection_names, 1):
+            print(f"{i}- {name.capitalize()}")
+
+        collection_choice = int(input("\nDigite o número da tabela de onde deseja deletar: "))
+        if 1 <= collection_choice <= len(collection_names):
+            selected_collection_name = collection_names[collection_choice - 1]
+            collection = db[selected_collection_name]
+        else:
+            print("Seleção de tabela inválida.")
+            return
+
+        # Busca todos os documentos da coleção e armazena em uma lista
+        documents = list(collection.find({}))
+
+        if not documents:
+            print("Nenhum documento encontrado nesta coleção para deletar.")
+            return
+
+        print("\nDocumentos disponíveis para deleção:")
+        for i, doc in enumerate(documents, 1):
+            print(f"{i}- {doc}")
+
+        doc_choice = int(input("\nDigite o número do documento que deseja deletar: "))
+        if 1 <= doc_choice <= len(documents):
+            # Pega o _id do documento escolhido para garantir que o correto seja deletado
+            doc_to_delete = documents[doc_choice - 1]
+            id_to_delete = doc_to_delete['_id']
+            
+            query = {"_id": id_to_delete}
+            result = collection.delete_one(query)
+            
+            if result.deleted_count > 0:
+                print(f"\nDocumento com ID '{id_to_delete}' deletado com sucesso.")
+            else:
+                # Esta mensagem é uma segurança, mas é improvável que ocorra nesta lógica
+                print("Erro: Nenhum documento foi deletado.")
+        else:
+            print("Seleção de documento inválida.")
+
+    except ValueError:
+        print("Entrada inválida. Por favor, insira um número.")
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado: {e}")
