@@ -12,7 +12,7 @@ mercado = MercadoDB()
 # Habilita CORS para o frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # em produção troque para seu domínio
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,3 +80,4 @@ def delete_document(collection_name: str, doc_id: str):
         return mercado.delete_api(collection_name, doc_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+

@@ -5,6 +5,25 @@ from pymongo import MongoClient
 from config import db_name, uri
 from db import get_database
 
+
+def _serialize_value(v):
+    """Converte tipos não JSON-serializáveis para representações simples (ObjectId, datetime)."""
+    if isinstance(v, ObjectId):
+        return str(v)
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, dict):
+        return {k: _serialize_value(val) for k, val in v.items()}
+    if isinstance(v, list):
+        return [_serialize_value(x) for x in v]
+    return v
+
+
+def _serialize_doc(doc):
+    """Serializa um documento inteiro vindo do Mongo para JSON-safe."""
+    return {k: _serialize_value(v) for k, v in doc.items()}
+
+
 class MercadoDB:
     def __init__(self):
         # cria o client e conecta
@@ -350,23 +369,51 @@ class MercadoDB:
     def list_collections_api(self):
         """Retorna lista de coleções do DB"""
         return self.db.list_collection_names()
-
-    def get_template_api(self, collection_name: str):
-        """Retorna um documento modelo (sample) da coleção sem o _id"""
-        collection = self.db[collection_name]
-        sample = collection.find_one()
-        if not sample:
-            return {}
-        if "_id" in sample:
-            del sample["_id"]
-        # Não serializamos tipos aqui (o frontend quer o "modelo"), mas convertimos ObjectId/datetime
-        return _serialize_doc(sample)
-
+    
     def list_documents_api(self, collection_name: str):
         """Retorna todos os documentos da coleção com _id como string"""
         collection = self.db[collection_name]
         docs = list(collection.find())
         return [_serialize_doc(doc) for doc in docs]
+
+    def get_template_api(self, collection_name: str):
+        """Retorna um documento modelo (template) da coleção sem o _id,
+        com valores genéricos baseados nos tipos dos campos."""
+        collection = self.db[collection_name]
+        sample = collection.find_one()
+        if not sample:
+            # coleção vazia: retorna um template genérico com campos de exemplo
+            return {
+                "nome": "",
+                "idade": 0,
+                "email": "",
+                "enderecos": [],
+                "ativo": True
+            }
+
+        if "_id" in sample:
+            del sample["_id"]
+
+        return self.generic_template(sample)
+
+    def generic_value(self, v):
+        if isinstance(v, str):
+            return ""
+        elif isinstance(v, bool):
+            return True
+        elif isinstance(v, int) or isinstance(v, float):
+            return 0
+        elif isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                return [self.generic_template(v[0])]
+            return []
+        elif isinstance(v, dict):
+            return self.generic_template(v)
+        else:
+            return None
+
+    def generic_template(self, doc):
+        return {k: self.generic_value(v) for k, v in doc.items()}
 
     def get_document_api(self, collection_name: str, doc_id: str):
         """Retorna um documento específico por id"""
@@ -417,21 +464,3 @@ class MercadoDB:
             return {"error": "invalid id", "detail": str(e)}
         result = collection.delete_one({"_id": oid})
         return {"deleted_count": result.deleted_count}
-
-
-
-def _serialize_value(v):
-    """Converte tipos não JSON-serializáveis para representações simples (ObjectId, datetime)."""
-    if isinstance(v, ObjectId):
-        return str(v)
-    if isinstance(v, datetime):
-        return v.isoformat()
-    if isinstance(v, dict):
-        return {k: _serialize_value(val) for k, val in v.items()}
-    if isinstance(v, list):
-        return [_serialize_value(x) for x in v]
-    return v
-
-def _serialize_doc(doc):
-    """Serializa um documento inteiro vindo do Mongo para JSON-safe."""
-    return {k: _serialize_value(v) for k, v in doc.items()}

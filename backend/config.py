@@ -1,4 +1,8 @@
-from pymongo import MongoClient # Importando a classe MongoClient.
+from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
 
-uri = "mongodb+srv://caang2024119tads0043:1234@cluster0.m6kyk5d.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-db_name = "Mercado"
+load_dotenv()
+
+uri = os.getenv("MONGODB_URI")
+db_name = os.getenv("MONGODB_DB", "mercado")

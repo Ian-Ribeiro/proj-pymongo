@@ -1,5 +1,4 @@
-// frontend/script.js
-const API = "http://localhost:8000";
+const API = "http://127.0.0.1:8000";
 
 const collectionSelect = document.getElementById("collectionSelect");
 const btnLoad = document.getElementById("btnLoad");
@@ -42,21 +41,41 @@ async function loadCollections(){
 async function loadCollectionData(){
   const col = collectionSelect.value;
   if (!col) return;
-  try{
+  try {
     currentDocs = await fetchJson(`${API}/documents/${encodeURIComponent(col)}`);
-    currentTemplate = await fetchJson(`${API}/template/${encodeURIComponent(col)}`);
+
+    if (currentDocs.length > 0) {
+      // Usa o primeiro documento da coleção como base para o template do formulário
+      currentTemplate = currentDocs[0];
+    } else {
+      currentTemplate = {}; // colecao vazia, form vazio
+    }
+
     renderDocs(currentDocs);
-    buildFormFromTemplate(currentTemplate, null); // form vazio para inserir
+    buildFormFromTemplate(currentTemplate, null);
     editingDocId = null;
     btnUpdate.disabled = true;
     btnReplace.disabled = true;
     formTitle.textContent = `Inserir em '${col}'`;
     resultArea.textContent = "";
     viewJson.textContent = "";
-  }catch(err){
+  } catch(err) {
     console.error(err);
     alert("Erro ao carregar dados: " + err.message);
   }
+}
+
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"]/g, function(ch) {
+    switch (ch) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      default: return ch;
+    }
+  });
 }
 
 function renderDocs(docs){
@@ -114,21 +133,27 @@ function renderDocs(docs){
   });
 }
 
-function escapeHtml(s){
-  return s.replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-}
-
-// Criar um formulário DOM recursivamente a partir do template
 function buildFormFromTemplate(template, prefix){
-  formContainer.innerHTML = ""; // porta principal
-  const root = document.createElement("div");
-  root.className = "formRoot";
+  formContainer.innerHTML = ""; // limpa o container
+  
   if (!template || Object.keys(template).length === 0) {
+    const root = document.createElement("div");
+    root.className = "formRoot";
     root.innerHTML = "<i>Modelo vazio (coleção pode estar vazia).</i>";
     formContainer.appendChild(root);
     return;
   }
-  _buildFields(template, root, prefix || "");
+
+  // Cria uma cópia do template para não modificar o original
+  const filteredTemplate = {...template};
+  // Remove o campo 'ativo' se existir
+  if (filteredTemplate.hasOwnProperty("ativo")) {
+    delete filteredTemplate.ativo;
+  }
+
+  const root = document.createElement("div");
+  root.className = "formRoot";
+  _buildFields(filteredTemplate, root, prefix || "");
   formContainer.appendChild(root);
 }
 
@@ -163,6 +188,12 @@ function _buildFields(obj, parentEl, namePrefix){
         itemEl.className = "listItem";
         itemEl.dataset.index = "0";
         _buildFields(sample[0], itemEl, `${fieldName}.0`);
+        const rem = document.createElement("button");
+        rem.type = "button";
+        rem.textContent = "Remover";
+        rem.onclick = () => { itemEl.remove(); };
+        itemEl.appendChild(rem);
+
         listContainer.appendChild(itemEl);
 
         const addBtn = document.createElement("button");
@@ -172,238 +203,220 @@ function _buildFields(obj, parentEl, namePrefix){
           const idx = listContainer.querySelectorAll(".listItem").length;
           const newItem = document.createElement("div");
           newItem.className = "listItem";
-          newItem.dataset.index = String(idx);
-          // clone fields from first item but rename keys to new index
-          // cria campos do sample[0] com o prefix fieldName.idx
+          newItem.dataset.index = idx.toString();
           _buildFields(sample[0], newItem, `${fieldName}.${idx}`);
-          const rem = document.createElement("button");
-          rem.type = "button";
-          rem.textContent = "Remover";
-          rem.onclick = () => { newItem.remove(); };
-          newItem.appendChild(rem);
+          const rem2 = document.createElement("button");
+          rem2.type = "button";
+          rem2.textContent = "Remover";
+          rem2.onclick = () => { newItem.remove(); };
+          newItem.appendChild(rem2);
           listContainer.appendChild(newItem);
         };
-
         fs.appendChild(listContainer);
         fs.appendChild(addBtn);
       } else {
-        // lista de primitivos — usar textarea (comma separated)
+        // array simples: usar textarea, uma linha por valor
+        const wrapper = document.createElement("div");
+        wrapper.className = "formGroup";
         const label = document.createElement("label");
-        label.textContent = `${fieldName} (lista de valores)`;
+        label.textContent = `${key} (lista de valores)`;
         const ta = document.createElement("textarea");
         ta.name = fieldName;
         ta.rows = 3;
         ta.placeholder = "valor1, valor2, valor3";
-        fs.appendChild(label);
-        fs.appendChild(ta);
+        wrapper.appendChild(label);
+        wrapper.appendChild(ta);
+        fs.appendChild(wrapper);
       }
-
       parentEl.appendChild(fs);
     } else {
       // campo primitivo
+      const wrapper = document.createElement("div");
+      wrapper.className = "formGroup";
       const label = document.createElement("label");
-      label.textContent = fieldName;
+      label.textContent = key;
+      wrapper.appendChild(label);
       const input = document.createElement("input");
       input.name = fieldName;
       input.type = "text";
       input.placeholder = String(sample === null ? "" : sample);
-      parentEl.appendChild(label);
-      parentEl.appendChild(input);
+      wrapper.appendChild(input);
+      parentEl.appendChild(wrapper);
     }
   }
 }
 
-// Preenche o formulário com os dados de um documento (para editar)
+// Preenche o formulário com dados do documento (para edição)
 function populateFormWithDoc(doc){
-  // constroi um formulário baseado no template, mas agora preenchendo pelos valores do doc
-  buildFormFromTemplate(currentTemplate);
-  // percorre inputs e set values por path
-  const inputs = formContainer.querySelectorAll("input, textarea");
-  inputs.forEach(inp => {
-    const name = inp.name;
-    const val = getValueByPath(doc, name);
-    if (val === undefined || val === null) return;
-    if (Array.isArray(val)){
-      // se o campo for textarea (lista de primitivos) preenche como comma-separated
-      if (inp.tagName.toLowerCase() === "textarea"){
-        inp.value = val.join(", ");
-      } else {
-        inp.value = JSON.stringify(val);
-      }
-    } else if (typeof val === "object"){
-      inp.value = JSON.stringify(val);
-    } else {
-      inp.value = String(val);
-    }
-  });
-}
+  // limpa tudo
+  const inputs = formContainer.querySelectorAll("input,textarea");
+  inputs.forEach(i => i.value = "");
 
-// util para pegar um valor de doc por path "a.b.0.c"
-function getValueByPath(obj, path){
-  const parts = path.split(".");
-  let ref = obj;
-  for (let p of parts){
-    // se parte é índice numérico
-    if (ref === undefined) return undefined;
-    if (/^\d+$/.test(p)){
-      p = parseInt(p, 10);
-    }
-    ref = ref[p];
-    if (ref === undefined) return undefined;
+  // preenche dados
+  for(const [k,v] of Object.entries(doc)){
+    setValueByPath(formContainer, k, v);
   }
-  return ref;
 }
 
-// Ler formulário e construir objeto JSON correspondente
-function formToObject(){
-  const data = {};
-  const inputs = formContainer.querySelectorAll("input, textarea");
-  inputs.forEach(inp => {
-    const name = inp.name;
-    if (!name) return;
-    const raw = inp.value;
-    // Se textarea e looks like list-of-primitives, split by comma
-    if (inp.tagName.toLowerCase() === "textarea"){
-      const arr = raw.split(",").map(s => s.trim()).filter(Boolean);
-      setByPath(data, name, arr);
-      return;
-    }
-    // try to parse as JSON for object/array inputs
-    let value = raw;
-    if (raw === "") {
-      value = "";
+function setValueByPath(container, path, value){
+  // caminhos do tipo: campo.subcampo, ou campo.0.subcampo
+  if (typeof value === "object" && value !== null){
+    if (Array.isArray(value)){
+      // array simples: coloca no textarea separado por vírgulas
+      // array de objetos: deve montar dinamicamente a lista
+      const listContainer = container.querySelector(`.listContainer[data-field="${path}"]`);
+      if (listContainer){
+        // remove itens atuais exceto o primeiro
+        const items = listContainer.querySelectorAll(".listItem");
+        items.forEach((item,i) => { if(i>0) item.remove(); });
+        // preenche item 0
+        if (value.length > 0 && typeof value[0] === "object"){
+          populateFormWithDocList(listContainer.querySelector(".listItem"), value[0]);
+          // adiciona os outros itens
+          for(let i=1;i<value.length;i++){
+            const addBtn = listContainer.nextElementSibling;
+            addBtn.click();
+            const newItem = listContainer.querySelector(`.listItem[data-index="${i}"]`);
+            populateFormWithDocList(newItem, value[i]);
+          }
+        } else {
+          // array simples
+          const ta = container.querySelector(`textarea[name="${path}"]`);
+          if(ta) ta.value = value.join(", ");
+        }
+      } else {
+        // array simples fora de listContainer
+        const ta = container.querySelector(`textarea[name="${path}"]`);
+        if(ta) ta.value = value.join(", ");
+      }
     } else {
-      // try json
-      try{
-        const parsed = JSON.parse(raw);
-        value = parsed;
-      }catch(e){
-        value = raw;
+      // objeto: atribuir recursivamente
+      for(const [subk, subv] of Object.entries(value)){
+        setValueByPath(container, `${path}.${subk}`, subv);
       }
     }
-    setByPath(data, name, value);
+  } else {
+    // primitivo: atribuir valor ao input/textarea
+    const input = container.querySelector(`[name="${path}"]`);
+    if(input){
+      input.value = value;
+    }
+  }
+}
+
+function populateFormWithDocList(container, obj){
+  for(const [k,v] of Object.entries(obj)){
+    setValueByPath(container, k, v);
+  }
+}
+
+// Coleta valores do formulário em objeto
+function collectFormData(){
+  const data = {};
+  // inputs e textareas
+  const inputs = formContainer.querySelectorAll("input,textarea");
+  inputs.forEach(input => {
+    const name = input.name;
+    if (!name) return;
+    const val = input.value.trim();
+    if (val === "") return;
+
+    // seta no objeto data com suporte a caminhos com '.'
+    setObjectValue(data, name, val, input.tagName.toLowerCase());
   });
+
   return data;
 }
 
-// setByPath sets nested keys, recognizing numeric tokens as array indexes
-function setByPath(obj, path, value){
-  const parts = path.split(".");
-  let ref = obj;
-  for (let i = 0; i < parts.length; i++){
-    let key = parts[i];
-    const nextIsIndex = (i+1 < parts.length && /^\d+$/.test(parts[i+1]));
-    // if current key is index number
-    if (/^\d+$/.test(key)){
-      key = parseInt(key, 10);
-    }
-    if (i === parts.length - 1){
-      // final
-      if (typeof key === "number"){
-        if (!Array.isArray(ref)) ref = []; // this case should not happen often
-        ref[key] = castValue(value);
-      } else {
-        ref[key] = castValue(value);
-      }
+// Função para atribuir valor em objeto pelo caminho com pontos, criando objetos aninhados conforme necessário
+function setObjectValue(obj, path, val, tagName){
+  const keys = path.split(".");
+  let cur = obj;
+  for(let i=0;i<keys.length-1;i++){
+    const k = keys[i];
+    if (!(k in cur)) cur[k] = {};
+    cur = cur[k];
+  }
+  const lastKey = keys[keys.length-1];
+
+  // Se é textarea e o valor é lista, parseia para array simples
+  if(tagName === "textarea"){
+    const arr = val.split(",").map(s=>s.trim()).filter(s=>s.length>0);
+    cur[lastKey] = arr;
+  } else {
+    cur[lastKey] = val;
+  }
+}
+
+// Envio do formulário
+async function insertDoc(){
+  const data = collectFormData();
+  try{
+    const col = collectionSelect.value;
+    if (!col) {
+      alert("Selecione uma coleção");
       return;
     }
-    // not final: ensure structure exists
-    const nextKey = parts[i+1];
-    const nextIsNum = /^\d+$/.test(nextKey);
-
-    if (typeof key === "number"){
-      if (!Array.isArray(ref)) {
-        // convert to array
-        // *rare*, but handle
-        ref = [];
-      }
-      if (!ref[key]) {
-        ref[key] = nextIsNum ? [] : {};
-      }
-      ref = ref[key];
-    } else {
-      if (ref[key] === undefined) {
-        ref[key] = nextIsNum ? [] : {};
-      }
-      ref = ref[key];
-    }
-  }
-}
-
-function castValue(v){
-  // tenta converter strings numéricas para number (opcional)
-  if (typeof v === "string"){
-    if (/^-?\d+(\.\d+)?$/.test(v)) return (v.indexOf('.')>-1 ? parseFloat(v) : parseInt(v,10));
-    if (v.toLowerCase() === "true") return true;
-    if (v.toLowerCase() === "false") return false;
-  }
-  return v;
-}
-
-// Handlers
-btnLoad.onclick = loadCollectionData;
-btnRefresh.onclick = loadCollectionData;
-
-// Insert
-btnInsert.onclick = async () => {
-  const col = collectionSelect.value;
-  if (!col) return alert("Escolha a coleção.");
-  const obj = formToObject();
-  try {
     const res = await fetchJson(`${API}/insert/${encodeURIComponent(col)}`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(obj)
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
     });
     resultArea.textContent = JSON.stringify(res, null, 2);
     await loadCollectionData();
-  } catch(err){
-    alert("Erro inserindo: " + err.message);
+  }catch(err){
+    alert("Erro ao inserir: " + err.message);
   }
-};
+}
 
-// Update (patch)
-btnUpdate.onclick = async () => {
-  if (!editingDocId) return alert("Escolha um documento para editar.");
-  const col = collectionSelect.value;
-  const patch = formToObject();
-  try {
-    const res = await fetchJson(`${API}/update/${encodeURIComponent(col)}/${encodeURIComponent(editingDocId)}`, {
-      method: "PATCH",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(patch)
+async function updateDoc(){
+  if (!editingDocId){
+    alert("Nenhum documento selecionado para atualizar.");
+    return;
+  }
+  const data = collectFormData();
+  try{
+    const col = collectionSelect.value;
+    const id = editingDocId;
+    const res = await fetchJson(`${API}/update/${encodeURIComponent(col)}/${encodeURIComponent(id)}`, {
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
     });
     resultArea.textContent = JSON.stringify(res, null, 2);
     await loadCollectionData();
-  } catch(err){
+  }catch(err){
     alert("Erro ao atualizar: " + err.message);
   }
-};
+}
 
-// Replace (put)
-btnReplace.onclick = async () => {
-  if (!editingDocId) return alert("Escolha um documento para substituir.");
-  const col = collectionSelect.value;
-  const newDoc = formToObject();
-  try {
-    const res = await fetchJson(`${API}/replace/${encodeURIComponent(col)}/${encodeURIComponent(editingDocId)}`, {
-      method: "PUT",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(newDoc)
+async function replaceDoc(){
+  if (!editingDocId){
+    alert("Nenhum documento selecionado para substituir.");
+    return;
+  }
+  const data = collectFormData();
+  try{
+    const col = collectionSelect.value;
+    const id = editingDocId;
+    const res = await fetchJson(`${API}/replace/${encodeURIComponent(col)}/${encodeURIComponent(id)}`, {
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
     });
     resultArea.textContent = JSON.stringify(res, null, 2);
     await loadCollectionData();
-  } catch(err){
+  }catch(err){
     alert("Erro ao substituir: " + err.message);
   }
-};
+}
 
-// Inicialização
-(async function init(){
+btnLoad.onclick = loadCollectionData;
+btnRefresh.onclick = loadCollections;
+btnInsert.onclick = insertDoc;
+btnUpdate.onclick = updateDoc;
+btnReplace.onclick = replaceDoc;
+
+window.onload = async () => {
   await loadCollections();
-  // auto-select first and load data if any
-  if (collectionSelect.options.length > 0){
-    collectionSelect.selectedIndex = 0;
-    await loadCollectionData();
-  }
-})();
+};
