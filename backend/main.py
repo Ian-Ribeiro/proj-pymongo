@@ -1,4 +1,3 @@
-# backend/main.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any, Dict
@@ -6,19 +5,15 @@ from models import MercadoDB
 
 app = FastAPI(title="Mercado API (FastAPI wrapper)")
 
-# Instância do DB
 mercado = MercadoDB()
 
-# Habilita CORS para o frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # em produção troque para seu domínio
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------- Endpoints ----------
 
 @app.get("/collections")
 def get_collections():

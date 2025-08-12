@@ -1,4 +1,3 @@
-// frontend/script.js
 const API = "http://localhost:8000";
 
 const collectionSelect = document.getElementById("collectionSelect");
@@ -17,7 +16,6 @@ let currentTemplate = null;
 let currentDocs = [];
 let editingDocId = null;
 
-// util: fetch json
 async function fetchJson(url, opts) {
   const res = await fetch(url, opts);
   if (!res.ok) {
@@ -27,7 +25,6 @@ async function fetchJson(url, opts) {
   return res.json();
 }
 
-// carrega coleções
 async function loadCollections(){
   try{
     const cols = await fetchJson(`${API}/collections`);
@@ -38,7 +35,6 @@ async function loadCollections(){
   }
 }
 
-// obtém lista de docs e template
 async function loadCollectionData(){
   const col = collectionSelect.value;
   if (!col) return;
@@ -46,7 +42,7 @@ async function loadCollectionData(){
     currentDocs = await fetchJson(`${API}/documents/${encodeURIComponent(col)}`);
     currentTemplate = await fetchJson(`${API}/template/${encodeURIComponent(col)}`);
     renderDocs(currentDocs);
-    buildFormFromTemplate(currentTemplate, null); // form vazio para inserir
+    buildFormFromTemplate(currentTemplate, null);
     editingDocId = null;
     btnUpdate.disabled = true;
     btnReplace.disabled = true;
@@ -118,9 +114,8 @@ function escapeHtml(s){
   return s.replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
 }
 
-// Criar um formulário DOM recursivamente a partir do template
 function buildFormFromTemplate(template, prefix){
-  formContainer.innerHTML = ""; // porta principal
+  formContainer.innerHTML = ""; 
   const root = document.createElement("div");
   root.className = "formRoot";
   if (!template || Object.keys(template).length === 0) {
@@ -132,14 +127,12 @@ function buildFormFromTemplate(template, prefix){
   formContainer.appendChild(root);
 }
 
-// função interna que cria campos recursivamente
 function _buildFields(obj, parentEl, namePrefix){
   for (const key of Object.keys(obj)){
     const sample = obj[key];
     const fieldName = namePrefix ? `${namePrefix}.${key}` : key;
 
     if (typeof sample === "object" && sample !== null && !Array.isArray(sample)){
-      // subdocumento
       const fs = document.createElement("fieldset");
       const legend = document.createElement("legend");
       legend.textContent = key;
@@ -147,18 +140,15 @@ function _buildFields(obj, parentEl, namePrefix){
       _buildFields(sample, fs, fieldName);
       parentEl.appendChild(fs);
     } else if (Array.isArray(sample)){
-      // lista — se é lista de objetos, cria um bloco para itens com botão adicionar
       const fs = document.createElement("fieldset");
       const legend = document.createElement("legend");
       legend.textContent = `${key} (Lista)`;
       fs.appendChild(legend);
 
       if (sample.length > 0 && typeof sample[0] === "object"){
-        // template item é sample[0]
         const listContainer = document.createElement("div");
         listContainer.className = "listContainer";
         listContainer.dataset.field = fieldName;
-        // cria primeira item (index 0)
         const itemEl = document.createElement("div");
         itemEl.className = "listItem";
         itemEl.dataset.index = "0";
@@ -173,8 +163,6 @@ function _buildFields(obj, parentEl, namePrefix){
           const newItem = document.createElement("div");
           newItem.className = "listItem";
           newItem.dataset.index = String(idx);
-          // clone fields from first item but rename keys to new index
-          // cria campos do sample[0] com o prefix fieldName.idx
           _buildFields(sample[0], newItem, `${fieldName}.${idx}`);
           const rem = document.createElement("button");
           rem.type = "button";
@@ -187,7 +175,6 @@ function _buildFields(obj, parentEl, namePrefix){
         fs.appendChild(listContainer);
         fs.appendChild(addBtn);
       } else {
-        // lista de primitivos — usar textarea (comma separated)
         const label = document.createElement("label");
         label.textContent = `${fieldName} (lista de valores)`;
         const ta = document.createElement("textarea");
@@ -200,7 +187,6 @@ function _buildFields(obj, parentEl, namePrefix){
 
       parentEl.appendChild(fs);
     } else {
-      // campo primitivo
       const label = document.createElement("label");
       label.textContent = fieldName;
       const input = document.createElement("input");
@@ -213,18 +199,14 @@ function _buildFields(obj, parentEl, namePrefix){
   }
 }
 
-// Preenche o formulário com os dados de um documento (para editar)
 function populateFormWithDoc(doc){
-  // constroi um formulário baseado no template, mas agora preenchendo pelos valores do doc
   buildFormFromTemplate(currentTemplate);
-  // percorre inputs e set values por path
   const inputs = formContainer.querySelectorAll("input, textarea");
   inputs.forEach(inp => {
     const name = inp.name;
     const val = getValueByPath(doc, name);
     if (val === undefined || val === null) return;
     if (Array.isArray(val)){
-      // se o campo for textarea (lista de primitivos) preenche como comma-separated
       if (inp.tagName.toLowerCase() === "textarea"){
         inp.value = val.join(", ");
       } else {
@@ -238,12 +220,10 @@ function populateFormWithDoc(doc){
   });
 }
 
-// util para pegar um valor de doc por path "a.b.0.c"
 function getValueByPath(obj, path){
   const parts = path.split(".");
   let ref = obj;
   for (let p of parts){
-    // se parte é índice numérico
     if (ref === undefined) return undefined;
     if (/^\d+$/.test(p)){
       p = parseInt(p, 10);
@@ -254,7 +234,6 @@ function getValueByPath(obj, path){
   return ref;
 }
 
-// Ler formulário e construir objeto JSON correspondente
 function formToObject(){
   const data = {};
   const inputs = formContainer.querySelectorAll("input, textarea");
@@ -262,18 +241,15 @@ function formToObject(){
     const name = inp.name;
     if (!name) return;
     const raw = inp.value;
-    // Se textarea e looks like list-of-primitives, split by comma
     if (inp.tagName.toLowerCase() === "textarea"){
       const arr = raw.split(",").map(s => s.trim()).filter(Boolean);
       setByPath(data, name, arr);
       return;
     }
-    // try to parse as JSON for object/array inputs
     let value = raw;
     if (raw === "") {
       value = "";
     } else {
-      // try json
       try{
         const parsed = JSON.parse(raw);
         value = parsed;
@@ -286,35 +262,29 @@ function formToObject(){
   return data;
 }
 
-// setByPath sets nested keys, recognizing numeric tokens as array indexes
 function setByPath(obj, path, value){
   const parts = path.split(".");
   let ref = obj;
   for (let i = 0; i < parts.length; i++){
     let key = parts[i];
     const nextIsIndex = (i+1 < parts.length && /^\d+$/.test(parts[i+1]));
-    // if current key is index number
     if (/^\d+$/.test(key)){
       key = parseInt(key, 10);
     }
     if (i === parts.length - 1){
-      // final
       if (typeof key === "number"){
-        if (!Array.isArray(ref)) ref = []; // this case should not happen often
+        if (!Array.isArray(ref)) ref = []; 
         ref[key] = castValue(value);
       } else {
         ref[key] = castValue(value);
       }
       return;
     }
-    // not final: ensure structure exists
     const nextKey = parts[i+1];
     const nextIsNum = /^\d+$/.test(nextKey);
 
     if (typeof key === "number"){
       if (!Array.isArray(ref)) {
-        // convert to array
-        // *rare*, but handle
         ref = [];
       }
       if (!ref[key]) {
@@ -331,7 +301,6 @@ function setByPath(obj, path, value){
 }
 
 function castValue(v){
-  // tenta converter strings numéricas para number (opcional)
   if (typeof v === "string"){
     if (/^-?\d+(\.\d+)?$/.test(v)) return (v.indexOf('.')>-1 ? parseFloat(v) : parseInt(v,10));
     if (v.toLowerCase() === "true") return true;
@@ -340,11 +309,9 @@ function castValue(v){
   return v;
 }
 
-// Handlers
 btnLoad.onclick = loadCollectionData;
 btnRefresh.onclick = loadCollectionData;
 
-// Insert
 btnInsert.onclick = async () => {
   const col = collectionSelect.value;
   if (!col) return alert("Escolha a coleção.");
@@ -362,7 +329,6 @@ btnInsert.onclick = async () => {
   }
 };
 
-// Update (patch)
 btnUpdate.onclick = async () => {
   if (!editingDocId) return alert("Escolha um documento para editar.");
   const col = collectionSelect.value;
@@ -380,7 +346,6 @@ btnUpdate.onclick = async () => {
   }
 };
 
-// Replace (put)
 btnReplace.onclick = async () => {
   if (!editingDocId) return alert("Escolha um documento para substituir.");
   const col = collectionSelect.value;
@@ -398,10 +363,8 @@ btnReplace.onclick = async () => {
   }
 };
 
-// Inicialização
 (async function init(){
   await loadCollections();
-  // auto-select first and load data if any
   if (collectionSelect.options.length > 0){
     collectionSelect.selectedIndex = 0;
     await loadCollectionData();

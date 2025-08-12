@@ -1,7 +1,6 @@
-from pymongo import MongoClient # Importando a classe MongoClient.
+from pymongo import MongoClient
 from config import uri,db_name
 
-# Conectando com o MongoDB Atlas.
 def get_database(uri:str,db_name:str):
     try:
         client = MongoClient(uri)

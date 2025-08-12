@@ -7,13 +7,10 @@ from db import get_database
 
 class MercadoDB:
     def __init__(self):
-        # cria o client e conecta
         self.client = MongoClient(uri)
         self.db = get_database(uri, db_name)
 
-    # ---------------- CONSULTAS ----------------
     def find(self):
-        """Busca por nome específico"""
         try:
             collection_names = self.db.list_collection_names()
             if not collection_names:
@@ -60,7 +57,6 @@ class MercadoDB:
             print(f"Erro: {e}")
 
     def return_all(self):
-        """Lista todos os documentos de uma tabela"""
         try:
             collection_names = self.db.list_collection_names()
             if not collection_names:
@@ -95,7 +91,6 @@ class MercadoDB:
             print(f"Erro: {e}")
 
     def group(self):
-        """Agrupa dados por campo"""
         try:
             collection_names = self.db.list_collection_names()
             if not collection_names:
@@ -154,7 +149,6 @@ class MercadoDB:
             print(f"Erro: {e}")
 
     def consulta(self):
-        """Menu de consultas"""
         while True:
             print("\n--- Menu de Consultas ---")
             print("1- Buscar por nome específico")
@@ -179,7 +173,6 @@ class MercadoDB:
             except ValueError:
                 print("Digite um número válido.")
 
-    # ---------------- INSERÇÃO ----------------
     def inserir(self):
         try:
             collection_names = self.db.list_collection_names()
@@ -229,11 +222,8 @@ class MercadoDB:
         except Exception as e:
             print(f"Erro: {e}")
 
-    # ---------------- ATUALIZAÇÃO ----------------
     def atualizar(self):
-        """Atualiza um campo específico de um documento"""
         try:
-            # 1. Listar tabelas
             collection_names = self.db.list_collection_names()
             if not collection_names:
                 print("Nenhuma tabela encontrada no banco de dados.")
@@ -250,7 +240,6 @@ class MercadoDB:
 
             collection = self.db[collection_names[collection_choice - 1]]
 
-            # 2. Listar documentos
             documents = list(collection.find())
             if not documents:
                 print("Nenhum documento encontrado nesta tabela.")
@@ -267,7 +256,6 @@ class MercadoDB:
 
             selected_doc = documents[doc_choice - 1]
 
-            # 3. Listar campos do documento
             fields = [field for field in selected_doc.keys() if field != "_id"]
             print("\nCampos disponíveis para atualização:")
             for i, field in enumerate(fields, 1):
@@ -280,10 +268,8 @@ class MercadoDB:
 
             selected_field = fields[field_choice - 1]
 
-            # 4. Novo valor
             new_value = input(f"Digite o novo valor para '{selected_field}': ")
 
-            # 5. Atualizar no banco
             result = collection.update_one(
                 {"_id": selected_doc["_id"]},
                 {"$set": {selected_field: new_value}}
@@ -300,7 +286,6 @@ class MercadoDB:
         except Exception as e:
             print(f"Erro: {e}")
 
-    # ---------------- DELEÇÃO ----------------
     def deletar(self):
         try:
             collection_names = self.db.list_collection_names()
@@ -345,31 +330,24 @@ class MercadoDB:
         except Exception as e:
             print(f"Erro: {e}")
 
-    #---------------------- APIs -----------------------
-
     def list_collections_api(self):
-        """Retorna lista de coleções do DB"""
         return self.db.list_collection_names()
 
     def get_template_api(self, collection_name: str):
-        """Retorna um documento modelo (sample) da coleção sem o _id"""
         collection = self.db[collection_name]
         sample = collection.find_one()
         if not sample:
             return {}
         if "_id" in sample:
             del sample["_id"]
-        # Não serializamos tipos aqui (o frontend quer o "modelo"), mas convertimos ObjectId/datetime
         return _serialize_doc(sample)
 
     def list_documents_api(self, collection_name: str):
-        """Retorna todos os documentos da coleção com _id como string"""
         collection = self.db[collection_name]
         docs = list(collection.find())
         return [_serialize_doc(doc) for doc in docs]
 
     def get_document_api(self, collection_name: str, doc_id: str):
-        """Retorna um documento específico por id"""
         collection = self.db[collection_name]
         try:
             oid = ObjectId(doc_id)
@@ -381,13 +359,11 @@ class MercadoDB:
         return _serialize_doc(doc)
 
     def inserir_api(self, collection_name: str, data: dict):
-        """Insere documento (API)"""
         collection = self.db[collection_name]
         result = collection.insert_one(data)
         return {"inserted_id": str(result.inserted_id)}
 
     def update_api(self, collection_name: str, doc_id: str, update_data: dict):
-        """Atualiza documento parcial (faz $set com o JSON recebido)."""
         collection = self.db[collection_name]
         try:
             oid = ObjectId(doc_id)
@@ -397,7 +373,6 @@ class MercadoDB:
         return {"matched": result.matched_count, "modified": result.modified_count}
 
     def replace_api(self, collection_name: str, doc_id: str, new_doc: dict):
-        """Substitui o documento inteiro (exceto _id)."""
         collection = self.db[collection_name]
         try:
             oid = ObjectId(doc_id)
@@ -409,7 +384,6 @@ class MercadoDB:
         return {"matched": result.matched_count, "modified": result.modified_count}
 
     def delete_api(self, collection_name: str, doc_id: str):
-        """Deleta documento por id"""
         collection = self.db[collection_name]
         try:
             oid = ObjectId(doc_id)
@@ -421,7 +395,6 @@ class MercadoDB:
 
 
 def _serialize_value(v):
-    """Converte tipos não JSON-serializáveis para representações simples (ObjectId, datetime)."""
     if isinstance(v, ObjectId):
         return str(v)
     if isinstance(v, datetime):
@@ -433,5 +406,4 @@ def _serialize_value(v):
     return v
 
 def _serialize_doc(doc):
-    """Serializa um documento inteiro vindo do Mongo para JSON-safe."""
     return {k: _serialize_value(v) for k, v in doc.items()}
