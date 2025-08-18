@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Any, Dict
 from models import MercadoDB
 
-app = FastAPI(title="Mercado API (FastAPI wrapper)")
+app = FastAPI(title="Mercado")
 
 mercado = MercadoDB()
 
@@ -74,4 +74,5 @@ def delete_document(collection_name: str, doc_id: str):
     try:
         return mercado.delete_api(collection_name, doc_id)
     except Exception as e:
+
         raise HTTPException(status_code=400, detail=str(e))
